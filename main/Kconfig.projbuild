@@ -1,0 +1,41 @@
+menu "Voice assistant settings"
+    config VOICE_WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+
+    config VOICE_WIFI_PASSWORD
+        string "Wi-Fi password (stored in firmware; use test network)"
+        default ""
+
+    config VOICE_HTTP_TIMEOUT_MS
+        int "Wi-Fi connect and HTTP timeout (ms)"
+        range 3000 60000
+        default 45000
+
+    config VOICE_END_SILENCE_MS
+        int "Silence to finish utterance (ms)"
+        range 400 3000
+        default 800
+
+    config LLM_SERVER_URL
+        string "LLM server base URL (empty disables requests)"
+        default ""
+
+    config LLM_REQUEST_TIMEOUT_MS
+        int "LLM HTTP timeout (ms)"
+        range 1000 60000
+        default 15000
+
+    config LLM_DEVICE_ID
+        string "Device ID (empty derives esp32_<MAC>)"
+        default ""
+
+    config LLM_SESSION_ID
+        string "Initial session ID (empty generates one per boot)"
+        default ""
+
+    config LLM_MAX_RESPONSE_BYTES
+        int "Maximum LLM response body bytes"
+        range 256 8192
+        default 4096
+endmenu

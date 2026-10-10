@@ -1,0 +1,25 @@
+# Generated ESP-IDF outputs (including caches from earlier project paths)
+/build/
+/build_before_directory_rename/
+/managed_components/
+
+# Local configuration and credentials
+/sdkconfig
+/sdkconfig.old
+/sdkconfig.*
+!/sdkconfig.defaults
+/main/cloud/asr/tencent_credentials.h
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# IDE and Python local files
+/.codebuddy/
+/.vscode/
+/.idea/
+__pycache__/
+*.py[cod]
+.venv/
