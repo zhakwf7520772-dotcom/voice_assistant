@@ -1,0 +1,221 @@
+{
+  "note": "Manual labels from user experiments, not decoder predictions. Session 1 extra noise/final events and session 3 final extra operation are deliberately unlabelled.",
+  "sessions": [
+    {
+      "session": 1,
+      "experiment": "25C cooling fan1 on/off three rounds",
+      "operations": [
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": false,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": false,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": false,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        }
+      ]
+    },
+    {
+      "session": 2,
+      "experiment": "25C on, temperature cycle three rounds, 25C off",
+      "operations": [
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 26,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 27,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 26,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 26,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 27,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 26,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 26,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 27,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 26,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": false,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        }
+      ]
+    },
+    {
+      "session": 3,
+      "experiment": "25C cooling fan1 on; fan 2 3 4 5 auto 1 twice",
+      "operations": [
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 2,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 3,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 4,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 5,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 0,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 2,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 3,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 4,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 5,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 0,
+          "mode_code": 1
+        },
+        {
+          "power": true,
+          "temp": 25,
+          "fan": 1,
+          "mode_code": 1
+        }
+      ]
+    }
+  ]
+}

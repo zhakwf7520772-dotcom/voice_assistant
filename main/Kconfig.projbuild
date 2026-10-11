@@ -39,3 +39,14 @@ menu "Voice assistant settings"
         range 256 8192
         default 4096
 endmenu
+
+menu "Infrared receiver settings"
+    config IR_RECEIVER_DIAGNOSTICS
+        bool "Log GPIO7 edge counts and RMT receive status"
+        default y
+        help
+            Count GPIO7 transitions independently of RMT and print diagnostic
+            counters every five seconds. GPIO interrupts only count edges;
+            all logging remains in the normal IR logging task. Disable after
+            verifying the receiver wiring to remove the diagnostic interrupts.
+endmenu
