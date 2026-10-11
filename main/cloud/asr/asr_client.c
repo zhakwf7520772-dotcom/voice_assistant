@@ -178,6 +178,12 @@ static esp_err_t recognize(const asr_request_t *request, char *text, size_t capa
 void asr_task(void *arg)
 {
     QueueHandle_t requests = arg;
+    // Prepare networking in this worker while microphone and wake detection run.
+    esp_err_t warmup_err = wifi_sta_wait_connected();
+    if (warmup_err == ESP_OK) warmup_err = wait_for_time();
+    if (warmup_err == ESP_OK) ESP_LOGI(TAG, "ASR network ready");
+    else ESP_LOGW(TAG, "ASR network warmup failed: %s; will retry on request",
+                  esp_err_to_name(warmup_err));
     while (true) {
         asr_request_t request;
         if (xQueueReceive(requests, &request, portMAX_DELAY) != pdTRUE) continue;

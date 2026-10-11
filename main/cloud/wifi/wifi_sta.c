@@ -37,7 +37,7 @@ static void wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
     }
 }
 
-static esp_err_t wifi_sta_start(void)
+static esp_err_t wifi_sta_init(void)
 {
     s_init_attempted = true;
     esp_err_t err = nvs_flash_init();
@@ -73,20 +73,25 @@ bool wifi_sta_is_connected(void)
     return s_started && s_events && (xEventGroupGetBits(s_events) & WIFI_CONNECTED) != 0;
 }
 
-esp_err_t wifi_sta_wait_connected(void)
+esp_err_t wifi_sta_start(void)
 {
+    if (s_started) return ESP_OK;
     if (!CONFIG_VOICE_WIFI_SSID[0]) {
         ESP_LOGE(TAG, "Wi-Fi SSID not configured");
         return ESP_ERR_INVALID_STATE;
     }
-    if (!s_started) {
-        if (s_init_attempted) return s_init_error;
-        s_init_error = wifi_sta_start();
-        if (s_init_error != ESP_OK) {
-            ESP_LOGE(TAG, "Wi-Fi init failed: %s", esp_err_to_name(s_init_error));
-            return s_init_error;
-        }
+    if (s_init_attempted) return s_init_error;
+    s_init_error = wifi_sta_init();
+    if (s_init_error != ESP_OK) {
+        ESP_LOGE(TAG, "Wi-Fi init failed: %s", esp_err_to_name(s_init_error));
     }
+    return s_init_error;
+}
+
+esp_err_t wifi_sta_wait_connected(void)
+{
+    esp_err_t err = wifi_sta_start();
+    if (err != ESP_OK) return err;
     EventBits_t bits = xEventGroupWaitBits(s_events, WIFI_CONNECTED, pdFALSE, pdFALSE,
                                            pdMS_TO_TICKS(CONFIG_VOICE_HTTP_TIMEOUT_MS));
     if (!(bits & WIFI_CONNECTED)) ESP_LOGE(TAG, "Wi-Fi did not obtain IP within %d ms", CONFIG_VOICE_HTTP_TIMEOUT_MS);

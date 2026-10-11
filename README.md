@@ -37,6 +37,8 @@ main/
 
 流程为 `WAIT_WAKE → WAKE_DETECTED → RECORDING → ASR_PROCESSING → LLM_PROCESSING → WAIT_WAKE`。唤醒、VAD 在本地运行；录音最长 15 秒，连续静音结束阈值默认 800 ms；ASR 与 LLM 均通过独立任务运行，不在 I2S 采集任务中执行 HTTP。LLM 不保存聊天历史：会话 ID 在本次启动内维持，可接受服务端更新。
 
+程序上电后立即启动 Wi-Fi 连接，不阻塞本地语音初始化。ASR 后台任务提前等待联网并完成 SNTP 校时，成功后输出 `ASR network ready`；预热失败时，后续识别请求会再次尝试联网和校时。如果在网络准备完成前讲话，第一次请求仍可能需要等待。
+
 ## 首次配置（Windows / PowerShell）
 
 在**已激活 ESP-IDF v5.5.5** 的终端中：
@@ -49,7 +51,7 @@ idf.py menuconfig
 
 如果本机已有填好密钥的 `tencent_credentials.h`，**不要执行覆盖用的 `Copy-Item`**。在本机编辑这个头文件，填入自己的腾讯云 SecretId / SecretKey；代码调用的是腾讯云**一句话识别**，密钥不会从环境变量读取。不要把凭据写入 README、Issue 或串口日志。
 
-在 `menuconfig → Voice assistant settings` 中填写可上网的 **2.4 GHz Wi-Fi** 名称及密码。LLM 服务端若尚未部署，可保持 `LLM server base URL` 为空：唤醒和 ASR 仍能运行，LLM 阶段会报告配置错误并返回待唤醒；不会产生模拟回复。其他选项：
+在 `menuconfig → Voice assistant settings` 中填写可上网的 **2.4 GHz Wi-Fi** 名称及密码。需要 LLM 时，在同一菜单的 `LLM server base URL` 中填写实际部署的服务根地址，保存后生成 `sdkconfig` 中的 `CONFIG_LLM_SERVER_URL`。LLM 服务端若尚未部署，可保持该项为空：启动时提示 LLM 未启用，唤醒和 ASR 仍能运行，识别成功后输出 `[LLM] skipped` 并返回待唤醒；不会产生模拟回复。其他选项：
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
@@ -72,7 +74,7 @@ idf.py -p COM4 build flash monitor
 
 根据实际串口修改 `COM4`；按 `Ctrl+]` 退出监视器。初次构建会生成 `build/` 与 `managed_components/`。更换模型配置后应重新执行完整的 `build flash`，不要只烧录旧应用映像。
 
-测试顺序：说“嗨，乐鑫”观察 `[WAKE] detected`，再说一句中文并停顿，观察 `[VAD] Speech started/ended` 与实际 `[ASR] result`；已配置且可访问 LLM 服务器时，还会显示 `[LLM] HTTP status`、`[LLM] response`、`[LLM] elapsed`。断网、ASR 错误、LLM 连接失败或空 URL 均应报告错误并返回 `[WAKE] Waiting for wake word...`。若看见 `AFE ringbuff_free_pct` 指标但仍正常唤醒和识别，不应单凭它判断音频丢帧；结合 `AFE feed failed/overflow` 等日志诊断。
+测试顺序：先确认 `Wi-Fi connected, IP=...` 和 `ASR network ready`，再说“嗨，乐鑫”观察 `[WAKE] detected`，接着说一句中文并停顿，观察 `[VAD] Speech started/ended` 与实际 `[ASR] result`；已配置且可访问 LLM 服务器时，还会显示 `llm: HTTP status`、`[LLM] response`、`[LLM] elapsed`。断网、ASR 错误或 LLM 连接失败均应报告错误并返回 `[WAKE] Waiting for wake word...`，空 URL 则提示跳过 LLM。`HTTP 0` 表示尚未获得 HTTP 状态码；检查此前的 LLM 初始化或网络错误日志。若看见 `AFE ringbuff_free_pct` 指标但仍正常唤醒和识别，不应单凭它判断音频丢帧；结合 `AFE feed failed/overflow` 等日志诊断。
 
 ## LLM 服务器接口约定
 

@@ -15,6 +15,7 @@
 #include "model_path.h"
 #include "asr_client.h"
 #include "llm_client.h"
+#include "sdkconfig.h"
 
 #define PRE_SAMPLES (MIC_SAMPLE_RATE_HZ / 2)
 #define MAX_SAMPLES (MIC_SAMPLE_RATE_HZ * 15)
@@ -131,7 +132,10 @@ static void fetch_task(void *arg)
                     ESP_LOGI(TAG, "[ASR] result: %s", result.text);
                     llm_request_t request = { 0 };
                     size_t length = strlen(result.text);
-                    if (length < sizeof(request.text)) {
+                    if (!CONFIG_LLM_SERVER_URL[0]) {
+                        ESP_LOGW(TAG, "[LLM] skipped: configure LLM server base URL in menuconfig -> Voice assistant settings");
+                        resume_wake();
+                    } else if (length < sizeof(request.text)) {
                         memcpy(request.text, result.text, length + 1);
                         if (xQueueSend(s_llm_requests, &request, 0) == pdTRUE) {
                             s_state = LLM_PROCESSING;

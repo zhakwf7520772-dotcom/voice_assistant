@@ -43,11 +43,14 @@ esp_err_t llm_client_init(void)
     const char *base = CONFIG_LLM_SERVER_URL;
     size_t len = strlen(base);
     if (len == 0) {
-        ESP_LOGW(TAG, "LLM server URL is not configured");
+        ESP_LOGW(TAG, "LLM disabled: configure LLM server base URL in menuconfig -> Voice assistant settings");
         return ESP_ERR_INVALID_STATE;
     }
     bool https = strncmp(base, "https://", 8) == 0;
-    if (!https && strncmp(base, "http://", 7) != 0) return ESP_ERR_INVALID_ARG;
+    if (!https && strncmp(base, "http://", 7) != 0) {
+        ESP_LOGE(TAG, "LLM server base URL must start with http:// or https://");
+        return ESP_ERR_INVALID_ARG;
+    }
     while (len > 0 && base[len - 1] == '/') --len;
     int n = snprintf(s_url, sizeof(s_url), "%.*s/api/chat", (int)len, base);
     if (n < 0 || n >= sizeof(s_url)) return ESP_ERR_INVALID_SIZE;
@@ -134,7 +137,16 @@ esp_err_t llm_client_chat(const char *text, llm_result_t *result)
     char *response = NULL;
     esp_http_client_handle_t client = NULL;
 
-    if (!s_initialized || !text || !text[0]) { err = ESP_ERR_INVALID_STATE; goto done; }
+    if (!s_initialized) {
+        ESP_LOGE(TAG, "LLM client is not initialized; check startup configuration errors");
+        err = ESP_ERR_INVALID_STATE;
+        goto done;
+    }
+    if (!text || !text[0]) {
+        ESP_LOGE(TAG, "LLM request text is empty");
+        err = ESP_ERR_INVALID_ARG;
+        goto done;
+    }
     if (strlen(text) >= LLM_TEXT_CAPACITY) { err = ESP_ERR_INVALID_SIZE; goto done; }
     if (!wifi_sta_is_connected()) {
         ESP_LOGE(TAG, "Wi-Fi disconnected; skipping LLM request");
@@ -209,12 +221,18 @@ void llm_task(void *arg)
 {
     QueueHandle_t requests = arg;
     esp_err_t init_err = llm_client_init();
+    if (init_err != ESP_OK && CONFIG_LLM_SERVER_URL[0]) {
+        ESP_LOGE(TAG, "LLM initialization failed: %s", esp_err_to_name(init_err));
+    }
     while (true) {
         llm_request_t request;
         if (xQueueReceive(requests, &request, portMAX_DELAY) != pdTRUE) continue;
         llm_result_t result = { 0 };
         if (init_err == ESP_OK) llm_client_chat(request.text, &result);
-        else result.err = init_err;
+        else {
+            ESP_LOGE(TAG, "LLM request skipped: initialization failed (%s)", esp_err_to_name(init_err));
+            result.err = init_err;
+        }
         // A single in-flight turn uses a one-slot queue; never discard its completion.
         if (s_results) xQueueOverwrite(s_results, &result);
     }
