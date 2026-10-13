@@ -14,6 +14,7 @@
 #include "esp_mac.h"
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "freertos/task.h"
 #include "sdkconfig.h"
 #include "wifi_sta.h"
 
@@ -181,7 +182,19 @@ esp_err_t llm_client_chat(const char *text, llm_result_t *result)
     if (!client) { err = ESP_ERR_NO_MEM; goto done; }
     esp_http_client_set_header(client, "Content-Type", "application/json");
     esp_http_client_set_header(client, "Accept", "application/json");
+    int64_t connect_started = esp_timer_get_time();
     err = esp_http_client_open(client, payload_len);
+    if (err == ESP_ERR_HTTP_CONNECT && wifi_sta_is_connected() &&
+        esp_timer_get_time() - connect_started < 2000000) {
+        // Only the request headers may have been sent. No chat body was sent.
+        ESP_LOGW(TAG, "Connect failed before request body; retrying once (errno=%d)",
+                 esp_http_client_get_errno(client));
+        esp_http_client_close(client);
+        vTaskDelay(pdMS_TO_TICKS(150));
+        err = esp_http_client_open(client, payload_len);
+    }
+    if (err != ESP_OK) ESP_LOGE(TAG, "Cannot connect to LLM server; errno=%d",
+                              esp_http_client_get_errno(client));
     if (err != ESP_OK) goto done;
     err = http_write_all(client, payload, payload_len);
     if (err != ESP_OK) goto done;

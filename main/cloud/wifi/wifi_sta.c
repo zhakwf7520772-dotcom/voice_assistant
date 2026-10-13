@@ -64,6 +64,10 @@ static esp_err_t wifi_sta_init(void)
     if ((err = esp_wifi_set_mode(WIFI_MODE_STA)) != ESP_OK) return err;
     if ((err = esp_wifi_set_config(WIFI_IF_STA, &config)) != ESP_OK) return err;
     if ((err = esp_wifi_start()) != ESP_OK) return err;
+    // Voice requests and WAV downloads need low receive latency.
+    if ((err = esp_wifi_set_ps(WIFI_PS_NONE)) != ESP_OK) return err;
+    ESP_LOGI(TAG, "Wi-Fi power save disabled; TCP receive window=%d bytes",
+             CONFIG_LWIP_TCP_WND_DEFAULT);
     s_started = true;
     return ESP_OK;
 }

@@ -1,6 +1,7 @@
 #include "voice.h"
 
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -38,6 +39,8 @@ static QueueHandle_t s_tts_requests, s_tts_results;
 
 typedef enum { WAIT_WAKE, WAKE_DETECTED, RECORDING, ASR_PROCESSING, LLM_PROCESSING, TTS_PROCESSING } voice_state_t;
 static voice_state_t s_state = WAIT_WAKE;
+static atomic_bool s_afe_feed_paused;
+static int64_t s_speech_end_us;
 
 static void pre_add(const int16_t *data, size_t count)
 {
@@ -61,9 +64,14 @@ static void resume_wake(void)
     s_record_count = 0;
     s_pre_pos = 0;
     s_pre_count = 0;
+    if (atomic_load(&s_afe_feed_paused)) {
+        s_afe->reset_buffer(s_afe_data);
+        ESP_LOGI(TAG, "[AFE] resuming microphone processing");
+    }
     s_afe->reset_vad(s_afe_data);
     s_afe->enable_wakenet(s_afe_data);
     s_state = WAIT_WAKE;
+    atomic_store(&s_afe_feed_paused, false);
     ESP_LOGI(TAG, "[SYS] free internal=%u PSRAM=%u; voice task stack=%u",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
@@ -73,6 +81,7 @@ static void resume_wake(void)
 
 static void finish_record(void)
 {
+    s_speech_end_us = esp_timer_get_time();
     ESP_LOGI(TAG, "[VAD] Speech ended");
     ESP_LOGI(TAG, "[VOICE] duration: %.2fs | PCM size: %u bytes",
              (double)s_record_count / MIC_SAMPLE_RATE_HZ, (unsigned)(s_record_count * 2));
@@ -86,6 +95,8 @@ static void finish_record(void)
         resume_wake();
         return;
     }
+    atomic_store(&s_afe_feed_paused, true);
+    ESP_LOGI(TAG, "[AFE] microphone processing paused during cloud requests");
     s_state = ASR_PROCESSING;
     ESP_LOGI(TAG, "[ASR] recognizing...");
 }
@@ -107,6 +118,12 @@ static void feed_task(void *arg)
             ESP_LOGE(TAG, "microphone read: %s", esp_err_to_name(err));
             filled = 0;
             vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+        // Keep draining I2S RX while cloud requests run, but do not spend CPU on AFE
+        // inference when wake detection and recording are already disabled.
+        if (atomic_load(&s_afe_feed_paused)) {
+            filled = 0;
             continue;
         }
         for (size_t i = 0; i < count; ++i) {
@@ -140,6 +157,10 @@ static void fetch_task(void *arg)
                     } else if (length < sizeof(request.text)) {
                         memcpy(request.text, result.text, length + 1);
                         if (xQueueSend(s_llm_requests, &request, 0) == pdTRUE) {
+                            if (CONFIG_TTS_SERVER_URL[0] && CONFIG_TTS_BEARER_TOKEN[0]) {
+                                tts_request_t warmup = { .prewarm = true };
+                                xQueueSend(s_tts_requests, &warmup, 0);
+                            }
                             s_state = LLM_PROCESSING;
                             ESP_LOGI(TAG, "[LLM] requesting...");
                         } else {
@@ -162,8 +183,11 @@ static void fetch_task(void *arg)
                 if (result.err == ESP_OK) {
                     ESP_LOGI(TAG, "[LLM] response: %s", result.reply);
                     if (CONFIG_TTS_SERVER_URL[0] && CONFIG_TTS_BEARER_TOKEN[0]) {
-                        tts_request_t request = { 0 };
+                        tts_request_t request = { .queued_us = esp_timer_get_time(),
+                                                  .speech_end_us = s_speech_end_us };
                         memcpy(request.text, result.reply, strlen(result.reply) + 1);
+                        atomic_store(&s_afe_feed_paused, true);
+                        ESP_LOGI(TAG, "[AFE] microphone processing paused during TTS");
                         if (xQueueSend(s_tts_requests, &request, 0) == pdTRUE) {
                             s_state = TTS_PROCESSING;
                             ESP_LOGI(TAG, "[TTS] synthesizing and playing...");
@@ -188,6 +212,13 @@ static void fetch_task(void *arg)
                 else ESP_LOGE(TAG, "[TTS] failed: %s (HTTP %d)", esp_err_to_name(result.err), result.http_status);
                 resume_wake();
             }
+        }
+        if (atomic_load(&s_afe_feed_paused)) {
+            // Feeding is paused: fetching an empty ring logs a warning inside
+            // ESP-SR. Leave pending frames for reset_buffer() on resume and
+            // only poll cloud result queues while waiting.
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
         }
         afe_fetch_result_t *r = s_afe->fetch_with_delay(s_afe_data, pdMS_TO_TICKS(1000));
         if (!r || r->ret_value != ESP_OK || !r->data || r->data_size < 0 || r->data_size % 2) {
@@ -284,7 +315,7 @@ esp_err_t voice_start(void)
     s_asr_results = xQueueCreate(1, sizeof(asr_result_t));
     s_llm_requests = xQueueCreate(1, sizeof(llm_request_t));
     s_llm_results = xQueueCreate(1, sizeof(llm_result_t));
-    s_tts_requests = xQueueCreate(1, sizeof(tts_request_t));
+    s_tts_requests = xQueueCreate(2, sizeof(tts_request_t));
     s_tts_results = xQueueCreate(1, sizeof(tts_result_t));
     if (!s_record || !s_preroll || !s_asr_requests || !s_asr_results ||
         !s_llm_requests || !s_llm_results || !s_tts_requests || !s_tts_results) {

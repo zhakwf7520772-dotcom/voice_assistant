@@ -15,7 +15,7 @@ menu "Voice assistant settings"
     config VOICE_END_SILENCE_MS
         int "Silence to finish utterance (ms)"
         range 400 3000
-        default 800
+        default 500
 
     config LLM_SERVER_URL
         string "LLM server base URL (empty disables requests)"
@@ -52,10 +52,22 @@ menu "Voice assistant settings"
         range 5000 180000
         default 150000
 
+    config TTS_PLAYBACK_BUFFER_MS
+        int "Audio to buffer before streaming WAV playback (ms)"
+        range 500 5000
+        default 1500
+
     config SPEAKER_VOLUME_PERCENT
         int "Speaker PCM volume (percent; start low)"
         range 1 100
         default 15
+
+    config SPEAKER_STARTUP_TEST
+        bool "Play two local speaker test tones at startup"
+        default n
+        help
+            Test the MAX98357 wiring before starting voice recognition.
+            Uses the same I2S playback path and volume as TTS, without Wi-Fi.
 endmenu
 
 menu "Infrared receiver settings"

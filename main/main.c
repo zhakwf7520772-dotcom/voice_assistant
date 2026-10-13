@@ -4,6 +4,8 @@
 #include "voice.h"
 #include "wifi_sta.h"
 #include "ir_receiver.h"
+#include "speaker.h"
+#include "sdkconfig.h"
 
 static const char *TAG = "voice_main";
 
@@ -18,6 +20,10 @@ void app_main(void)
     if (err != ESP_OK) ESP_LOGE(TAG, "Wi-Fi startup failed: %s", esp_err_to_name(err));
     err = ir_receiver_start();
     if (err != ESP_OK) ESP_LOGE(TAG, "IR startup failed: %s", esp_err_to_name(err));
+#ifdef CONFIG_SPEAKER_STARTUP_TEST
+    err = speaker_play_test_tones();
+    if (err != ESP_OK) ESP_LOGE(TAG, "Speaker startup test failed: %s", esp_err_to_name(err));
+#endif
     err = voice_start();
     if (err != ESP_OK) ESP_LOGE(TAG, "Voice startup failed: %s", esp_err_to_name(err));
 }
