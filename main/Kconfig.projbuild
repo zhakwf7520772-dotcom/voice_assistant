@@ -38,6 +38,24 @@ menu "Voice assistant settings"
         int "Maximum LLM response body bytes"
         range 256 8192
         default 4096
+
+    config TTS_SERVER_URL
+        string "TTS server base URL (HTTPS; empty disables speech output)"
+        default ""
+
+    config TTS_BEARER_TOKEN
+        string "TTS bearer token (stored in firmware; do not commit sdkconfig)"
+        default ""
+
+    config TTS_REQUEST_TIMEOUT_MS
+        int "TTS HTTP timeout (ms)"
+        range 5000 180000
+        default 150000
+
+    config SPEAKER_VOLUME_PERCENT
+        int "Speaker PCM volume (percent; start low)"
+        range 1 100
+        default 15
 endmenu
 
 menu "Infrared receiver settings"

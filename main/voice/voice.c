@@ -15,6 +15,7 @@
 #include "model_path.h"
 #include "asr_client.h"
 #include "llm_client.h"
+#include "tts_client.h"
 #include "sdkconfig.h"
 
 #define PRE_SAMPLES (MIC_SAMPLE_RATE_HZ / 2)
@@ -33,8 +34,9 @@ static int16_t *s_preroll;
 static size_t s_pre_pos, s_pre_count, s_record_count;
 static QueueHandle_t s_asr_requests, s_asr_results;
 static QueueHandle_t s_llm_requests, s_llm_results;
+static QueueHandle_t s_tts_requests, s_tts_results;
 
-typedef enum { WAIT_WAKE, WAKE_DETECTED, RECORDING, ASR_PROCESSING, LLM_PROCESSING } voice_state_t;
+typedef enum { WAIT_WAKE, WAKE_DETECTED, RECORDING, ASR_PROCESSING, LLM_PROCESSING, TTS_PROCESSING } voice_state_t;
 static voice_state_t s_state = WAIT_WAKE;
 
 static void pre_add(const int16_t *data, size_t count)
@@ -157,9 +159,33 @@ static void fetch_task(void *arg)
         } else if (s_state == LLM_PROCESSING) {
             llm_result_t result;
             if (xQueueReceive(s_llm_results, &result, 0) == pdTRUE) {
-                if (result.err == ESP_OK) ESP_LOGI(TAG, "[LLM] response: %s", result.reply);
-                else ESP_LOGE(TAG, "[LLM] error: %s (HTTP %d)", esp_err_to_name(result.err), result.http_status);
+                if (result.err == ESP_OK) {
+                    ESP_LOGI(TAG, "[LLM] response: %s", result.reply);
+                    if (CONFIG_TTS_SERVER_URL[0] && CONFIG_TTS_BEARER_TOKEN[0]) {
+                        tts_request_t request = { 0 };
+                        memcpy(request.text, result.reply, strlen(result.reply) + 1);
+                        if (xQueueSend(s_tts_requests, &request, 0) == pdTRUE) {
+                            s_state = TTS_PROCESSING;
+                            ESP_LOGI(TAG, "[TTS] synthesizing and playing...");
+                        } else {
+                            ESP_LOGE(TAG, "[TTS] request queue full");
+                            resume_wake();
+                        }
+                    } else {
+                        ESP_LOGW(TAG, "[TTS] skipped: configure server URL and token in menuconfig");
+                        resume_wake();
+                    }
+                } else {
+                    ESP_LOGE(TAG, "[LLM] error: %s (HTTP %d)", esp_err_to_name(result.err), result.http_status);
+                    resume_wake();
+                }
                 ESP_LOGI(TAG, "[LLM] elapsed: %lld ms", (long long)result.elapsed_ms);
+            }
+        } else if (s_state == TTS_PROCESSING) {
+            tts_result_t result;
+            if (xQueueReceive(s_tts_results, &result, 0) == pdTRUE) {
+                if (result.err == ESP_OK) ESP_LOGI(TAG, "[TTS] playback complete");
+                else ESP_LOGE(TAG, "[TTS] failed: %s (HTTP %d)", esp_err_to_name(result.err), result.http_status);
                 resume_wake();
             }
         }
@@ -258,8 +284,10 @@ esp_err_t voice_start(void)
     s_asr_results = xQueueCreate(1, sizeof(asr_result_t));
     s_llm_requests = xQueueCreate(1, sizeof(llm_request_t));
     s_llm_results = xQueueCreate(1, sizeof(llm_result_t));
+    s_tts_requests = xQueueCreate(1, sizeof(tts_request_t));
+    s_tts_results = xQueueCreate(1, sizeof(tts_result_t));
     if (!s_record || !s_preroll || !s_asr_requests || !s_asr_results ||
-        !s_llm_requests || !s_llm_results) {
+        !s_llm_requests || !s_llm_results || !s_tts_requests || !s_tts_results) {
         err = ESP_ERR_NO_MEM;
         goto fail;
     }
@@ -267,9 +295,11 @@ esp_err_t voice_start(void)
     if (err != ESP_OK) goto fail;
     asr_set_result_queue(s_asr_results);
     llm_set_result_queue(s_llm_results);
+    tts_set_result_queue(s_tts_results);
     // Task creation failure after other tasks start cannot safely be rolled back here.
     if (xTaskCreatePinnedToCore(asr_task, "asr_http", 12288, s_asr_requests, 4, NULL, 1) != pdPASS ||
         xTaskCreatePinnedToCore(llm_task, "llm_http", 12288, s_llm_requests, 4, NULL, 1) != pdPASS ||
+        xTaskCreatePinnedToCore(tts_task, "tts_http", 8192, s_tts_requests, 4, NULL, 1) != pdPASS ||
         xTaskCreatePinnedToCore(fetch_task, "voice_fetch", 8192, NULL, 6, NULL, 1) != pdPASS ||
         xTaskCreatePinnedToCore(feed_task, "mic_feed", 4096, NULL, 8, NULL, 0) != pdPASS) {
         ESP_LOGE(TAG, "task creation failed");
@@ -282,6 +312,8 @@ fail:
     if (s_asr_results) vQueueDelete(s_asr_results);
     if (s_llm_requests) vQueueDelete(s_llm_requests);
     if (s_llm_results) vQueueDelete(s_llm_results);
+    if (s_tts_requests) vQueueDelete(s_tts_requests);
+    if (s_tts_results) vQueueDelete(s_tts_results);
     free(s_record);
     free(s_preroll);
     if (s_afe_data) s_afe->destroy(s_afe_data);
